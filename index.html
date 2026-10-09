@@ -14,7 +14,7 @@
 <script>
 'use strict';
 // SET TO YOUR EXACT GOOGLE APPS SCRIPT WEB APP URL ENDING IN /exec
-const RETURN_WEB_APP_URL=https://script.google.com/macros/s/AKfycbzVZQPHDxgbZBb4pqgo--AYJbFnC9XnPkUiISwk3nms4T4EilrXyZ9TOheDLt3QKQQQ/exec;
+const RETURN_WEB_APP_URL='https://script.google.com/macros/s/AKfycbzVZQPHDxgbZBb4pqgo--AYJbFnC9XnPkUiISwk3nms4T4EilrXyZ9TOheDLt3QKQQQ/exec';
 const $=id=>document.getElementById(id);
 let reader=null, busy=false, detected=false;
 function status(message,error=false){$('status').textContent=message;$('status').classList.toggle('error',error)}
