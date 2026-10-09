@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>MENCARI MUO | QR Scanner</title>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<style>
+:root{color-scheme:light;--blue:#143e96;--light:#eaf1ff}*{box-sizing:border-box}body{margin:0;background:#f7f9fe;color:#18264a;font:16px system-ui,-apple-system,Segoe UI,sans-serif}header{padding:22px;background:var(--blue);color:white;text-align:center}header h1{margin:0;font-size:26px;letter-spacing:1px}main{max-width:600px;margin:24px auto;padding:0 18px 35px}.panel{background:white;border:1px solid #dce3f2;border-radius:20px;padding:22px;box-shadow:0 12px 36px #0a26600b}button,.button{display:inline-block;border:0;border-radius:12px;background:var(--blue);color:white;padding:14px 17px;font-weight:700;font-size:15px;cursor:pointer;text-decoration:none;margin:6px 5px 6px 0}button.secondary{background:var(--light);color:var(--blue)}button:disabled{opacity:.6;cursor:wait}#reader{max-width:100%;margin:12px auto}#status{padding:12px;border-radius:10px;background:#eaf1ff;overflow-wrap:anywhere}#status.error{background:#ffeaed;color:#a01428}input{width:100%;padding:14px;border:1px solid #a9b9d6;border-radius:10px;font-size:16px}label{display:block;margin:15px 0 7px;font-weight:600}.small{font-size:13px;color:#64738f}#file{display:none}
+</style></head><body>
+<header><h1>MENCARI MUO</h1><div>External QR Checkpoint Scanner</div></header>
+<main><div class="panel"><p>Scan a checkpoint QR with your camera, or choose a saved QR photo. You'll return to the MENCARI MUO website to verify your stamp.</p>
+<div><button id="start" type="button">📷 Open Camera</button><button class="secondary" id="stop" type="button">Stop Camera</button><button class="secondary" id="photo" type="button">🖼️ Scan QR from Photo</button><input id="file" type="file" accept="image/*"></div>
+<div id="reader"></div><p id="status" role="status">Ready to scan.</p>
+<label for="manual">Or enter checkpoint code</label><input id="manual" placeholder="Checkpoint code (UUID)" autocomplete="off"><button class="secondary" id="manualGo" type="button">Continue to Website →</button>
+<p class="small">Camera requires HTTPS and browser permission. Scanning a QR does not automatically award a stamp; Google Apps Script verifies it after sign-in.</p></div></main>
+<script>
+'use strict';
+// SET TO YOUR EXACT GOOGLE APPS SCRIPT WEB APP URL ENDING IN /exec
+const RETURN_WEB_APP_URL=https://script.google.com/macros/s/AKfycbzVZQPHDxgbZBb4pqgo--AYJbFnC9XnPkUiISwk3nms4T4EilrXyZ9TOheDLt3QKQQQ/exec;
+const $=id=>document.getElementById(id);
+let reader=null, busy=false, detected=false;
+function status(message,error=false){$('status').textContent=message;$('status').classList.toggle('error',error)}
+function checkpoint(raw){
+ let code=String(raw||'').trim();
+ try{const u=new URL(code);code=u.searchParams.get('cp')||u.searchParams.get('checkpoint')||u.searchParams.get('code')||'';}catch(_){}
+ return /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(code)?code:'';
+}
+function finish(raw){
+ const cp=checkpoint(raw);
+ if(!cp){status('QR does not contain a valid MENCARI MUO checkpoint UUID.',true);return;}
+ if(RETURN_WEB_APP_URL.includes('PASTE-YOUR-DEPLOYMENT-ID')){status('Setup required: paste your Apps Script /exec URL into scanner.html.',true);return;}
+ detected=true;status('QR verified as a checkpoint format. Returning to website…');
+ const target=new URL(RETURN_WEB_APP_URL);target.searchParams.set('cp',cp);
+ window.location.assign(target.href);
+}
+async function stop(){
+ const old=reader;reader=null;
+ if(old){try{if(old.isScanning)await old.stop();}catch(_){}try{old.clear();}catch(_){}}
+ $('reader').replaceChildren();
+}
+async function start(){
+ if(busy)return;busy=true;detected=false;$('start').disabled=true;
+ try{
+  if(!window.isSecureContext)throw Error('Open the HTTPS GitHub Pages link.');
+  if(typeof Html5Qrcode==='undefined')throw Error('QR library did not load. Check internet connection.');
+  await stop();reader=new Html5Qrcode('reader',{formatsToSupport:[Html5QrcodeSupportedFormats.QR_CODE],verbose:false});
+  const onSuccess=text=>{if(!detected)finish(text)};
+  const cfg={fps:10,qrbox:(w,h)=>{const n=Math.max(120,Math.min(250,w-20,h-20));return {width:n,height:n}}};
+  try{await reader.start({facingMode:'environment'},cfg,onSuccess,()=>{});}
+  catch(first){const cameras=await Html5Qrcode.getCameras();if(!cameras.length)throw first;await reader.start(cameras[0].id,cfg,onSuccess,()=>{});}
+  status('Camera running. Point at a MENCARI MUO checkpoint QR.');
+ }catch(e){await stop();status('Cannot open camera: '+(e.message||e)+'. Try Scan QR from Photo.',true)}
+ finally{busy=false;$('start').disabled=false}
+}
+async function scanPhoto(file){if(!file)return;try{
+ if(typeof Html5Qrcode==='undefined')throw Error('QR library not loaded.');
+ await stop();const host=$('reader');const scanner=new Html5Qrcode('reader',{formatsToSupport:[Html5QrcodeSupportedFormats.QR_CODE],verbose:false});
+ try{const raw=await scanner.scanFile(file,false);finish(raw)}finally{try{scanner.clear()}catch(_){}host.replaceChildren()}
+ }catch(e){status('Cannot read QR from photo: '+(e.message||e),true)}finally{$('file').value=''}}
+$('start').addEventListener('click',start);
+$('stop').addEventListener('click',async()=>{await stop();status('Camera stopped.')});
+$('photo').addEventListener('click',()=>$('file').click());
+$('file').addEventListener('change',e=>scanPhoto(e.target.files[0]));
+$('manualGo').addEventListener('click',()=>finish($('manual').value));
+window.addEventListener('pagehide',()=>{stop()});
+</script></body></html>
